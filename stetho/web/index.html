@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stetho</title>
+<meta name="description" content="Phone-video screening for pumps and motors, compared with each machine's own healthy baseline.">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<a class="skip" href="#check">Skip to check a recording</a>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="logo" aria-hidden="true">◉</span> Stetho</div>
+    <p class="tag">Is your pump different from its own normal? Send a short video. Get a clear next step.</p>
+    <p id="status" class="status" aria-live="polite">Checking server…</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card" aria-labelledby="guide-h">
+    <h2 id="guide-h">1 · Record safely</h2>
+    <div class="safety" role="note"><strong>Safety first:</strong> never touch a running machine, never remove guards or covers, and keep loose clothing and hair away. Stand where you normally stand.</div>
+    <ol class="steps">
+      <li><b>Rest the phone</b> on a brick or wall about 1 m away. A steady phone matters more than anything else.</li>
+      <li><b>Machine in the centre</b>, with some floor or wall visible around it. Stetho uses the still background to cancel hand shake.</li>
+      <li><b>Same spot every time.</b> Mark it with paint or a stone. Comparisons are only fair from the same spot.</li>
+      <li><b>10–15 seconds, sound on.</b> Use slow-motion mode if your phone has it.</li>
+      <li><b>First time?</b> Save 3 recordings as a <em>healthy reference</em> on different days, ideally after a service.</li>
+    </ol>
+  </section>
+
+  <section class="card" id="check" aria-labelledby="check-h">
+    <h2 id="check-h">2 · Check a recording</h2>
+    <form id="form">
+      <label class="file">
+        <span>Video of the running machine</span>
+        <input type="file" id="video" name="video" accept="video/*" capture="environment" required>
+      </label>
+      <div class="grid">
+        <label>Machine name<input id="machine" name="machine" value="Well pump" maxlength="40" autocomplete="off"></label>
+        <label>Reply language
+          <select id="lang" name="lang"><option value="en">English</option><option value="hi">हिंदी (Hindi)</option></select>
+        </label>
+        <label>Rated speed (rpm, optional)<input id="rpm" name="rpm" type="number" min="300" max="3700" step="10" placeholder="from nameplate, e.g. 2880"></label>
+      </div>
+      <fieldset>
+        <legend>This recording is…</legend>
+        <label class="radio"><input type="radio" name="mode" value="check" checked> a routine check</label>
+        <label class="radio"><input type="radio" name="mode" value="baseline"> a <b>healthy reference</b> (machine working well)</label>
+        <label class="radio"><input type="radio" name="mode" value="before_repair"> just <b>before a repair</b></label>
+        <label class="radio"><input type="radio" name="mode" value="after_repair"> just <b>after a repair</b></label>
+      </fieldset>
+      <button type="submit" class="primary" id="go">Check this recording</button>
+    </form>
+
+    <div class="demo" aria-labelledby="demo-h">
+      <h3 id="demo-h">No machine nearby? Try a simulated pump</h3>
+      <p class="muted">These use <b>synthetic video and sound with known faults</b>, generated on the server. They show how the software behaves. They are not evidence about real pumps. The first run builds 3 simulated healthy references, so it takes longer.</p>
+      <div class="chips" role="group" aria-label="Simulated scenarios">
+        <button data-demo="healthy">Healthy</button>
+        <button data-demo="bearing">Bearing knock</button>
+        <button data-demo="imbalance">Imbalance</button>
+        <button data-demo="cavitation">Cavitation crackle</button>
+        <button data-demo="dark">Too dark</button>
+        <button data-demo="shaky">Very shaky</button>
+      </div>
+      <label class="inline"><input type="checkbox" id="demoAfter"> treat as “after repair”</label>
+    </div>
+    <p id="busy" class="busy" hidden aria-live="polite"><span class="spinner" aria-hidden="true"></span> <span id="busyText">Analysing…</span></p>
+    <p id="error" class="error" role="alert" hidden></p>
+  </section>
+
+  <section id="result" class="card" hidden aria-labelledby="res-h" tabindex="-1">
+    <h2 id="res-h">3 · Result</h2>
+    <div id="banner" class="banner" aria-live="polite"></div>
+    <div class="voice"><audio id="voice" controls preload="none"></audio></div>
+    <div id="message" class="message"></div>
+
+    <details open>
+      <summary>Why: the evidence</summary>
+      <div id="findings"></div>
+      <h4>Compared with this machine’s own healthy reference</h4>
+      <p class="muted small">Each bar shows how far a measurement moved, in units of normal recording-to-recording spread. Beyond the dashed line (±3) counts as notable.</p>
+      <div id="zchart" class="chart"></div>
+      <h4>Visible motion of the machine vs. the still background</h4>
+      <p class="muted small">Image-plane displacement in pixels, after cancelling camera shake. This is not millimetres, velocity or acceleration. The grey line is the noise floor measured on background points.</p>
+      <div id="spectrum" class="chart"></div>
+      <div id="xmodal" class="small"></div>
+      <h4>Recording quality</h4>
+      <ul id="quality" class="quality"></ul>
+    </details>
+
+    <details id="magWrap" hidden>
+      <summary>See the movement (amplified visual aid)</summary>
+      <video id="mag" controls muted loop playsinline preload="none"></video>
+      <p class="muted small">Movement is amplified so you can see it. This is not a measurement. Amplification can also create halos that are not real motion.</p>
+    </details>
+
+    <details>
+      <summary>Technician summary (to forward)</summary>
+      <pre id="tech"></pre>
+      <button id="copyTech" type="button">Copy</button>
+    </details>
+    <p id="timing" class="muted small"></p>
+    <p id="disclaimer" class="disclaimer"></p>
+    <p><a id="json" download="stetho-report.json" href="#">Download full report (JSON)</a></p>
+  </section>
+
+  <section class="card" aria-labelledby="data-h">
+    <h2 id="data-h">Your machines and data</h2>
+    <p class="muted">Stetho stores measurements, not your video. Uploaded videos are deleted after analysis by default. Generated voice notes and clips expire automatically.</p>
+    <ul id="machines" class="machines"></ul>
+    <button id="delete" type="button" class="danger">Delete all my data</button>
+  </section>
+</main>
+<footer class="wrap muted small">Stetho is a screening aid, not a diagnostic instrument. Always have findings confirmed by a qualified technician.</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

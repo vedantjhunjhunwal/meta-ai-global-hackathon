@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+var/
+*.db
+.env
+*.mp4
+*.mov
+*.ogg
+*.wav
+!docs/**/*.png

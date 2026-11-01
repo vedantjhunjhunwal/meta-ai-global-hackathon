@@ -179,3 +179,13 @@ def test_graph_client_rejects_oversized_media(settings):
     g = GraphClient(settings, httpx.MockTransport(handler), sleep=lambda s: None)
     with pytest.raises(MediaError):
         g.download_media("M", 64 * 1024 * 1024)
+
+
+def test_ambient_and_history_commands(bot):
+    consent(bot)
+    assert bot.handle(msg(50, "HISTORY")) == "history"
+    assert "No saved results" in bot.graph.sent[-1][2]
+    assert bot.handle(msg(51, "AMBIENT")) == "mode"
+    assert "OFF" in bot.graph.sent[-1][2]  # explains to switch off, only if safe
+    bot.handle(msg(52, type_="video", media_id="M", mime="video/mp4"))
+    assert bot.calls[-1]["mode"] == "ambient"

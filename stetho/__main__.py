@@ -36,6 +36,12 @@ def _print_report(r: dict) -> None:
         print(f"   finding: {f['id']} [{f['strength']}] basis={f.get('basis')}")
     if a.get("repair"):
         print(f"   repair: {a['repair']}")
+    if (a.get("spot") or {}).get("status") not in (None, "not_available"):
+        print(f"   same-spot check: {a['spot']['status']}")
+    if (a.get("ambient") or {}).get("status") not in (None, "not_available"):
+        print(f"   background reference: {a['ambient']['status']}, ignored {len(a['ambient'].get('excluded', []))} feature(s)")
+    if (a.get("trend") or {}).get("status") in ("rising", "steady"):
+        print(f"   trend: {a['trend']['status']} {a['trend']['values']}")
     print("   --- message ---")
     for line in r["explanation"]["chat_text"].splitlines():
         print("   " + line)
@@ -103,15 +109,24 @@ def main(argv=None) -> int:
         ("baseline", "Day 3: healthy reference #3", dict(seed=3)),
         ("check", "Week 2: routine check", dict(seed=4)),
         ("check", "Week 3: shaky hand-held recording in the dark", dict(seed=5, brightness=0.08, shake_px=30)),
-        ("before_repair", "Week 5: new knocking (simulated outer-race bearing defect)", dict(seed=6, fault="bearing")),
-        ("after_repair", "Week 5: after bearing replacement", dict(seed=7)),
+        ("check", "Week 4: recorded from too close (phone moved)", dict(seed=6, view_scale=1.3)),
+        ("check", "Week 5: slight wear begins (simulated, severity 0.1)", dict(seed=7, fault="bearing", fault_severity=0.1)),
+        ("check", "Week 6: wear (0.2)", dict(seed=8, fault="bearing", fault_severity=0.2)),
+        ("check", "Week 7: wear (0.3)", dict(seed=9, fault="bearing", fault_severity=0.3)),
+        ("check", "Week 8: wear (0.4)", dict(seed=10, fault="bearing", fault_severity=0.4)),
+        ("before_repair", "Week 9: clear knocking (simulated outer-race bearing defect)", dict(seed=11, fault="bearing")),
+        ("after_repair", "Week 9: after bearing replacement", dict(seed=12)),
+        ("check", "Week 10: a generator starts nearby - check WITHOUT a background reference",
+         dict(seed=13, ambient_hiss=0.05)),
+        ("ambient", "Week 10: background reference (pump switched off)", dict(seed=14, ambient_hiss=0.05, machine_on=False)),
+        ("check", "Week 10: same check WITH the background reference", dict(seed=15, ambient_hiss=0.05)),
     ]
     print("STETHO DEMO - every recording below is SIMULATED (synthetic video + audio with known ground truth).")
     print("It demonstrates the software flow, not real-world accuracy.\n")
     timings = []
     for i, (mode, title, kw) in enumerate(story):
         p = out / f"{i}_{mode}.mp4"
-        make_recording(SimSpec(fps=120, duration_s=10, **kw), p)
+        make_recording(SimSpec(fps=60, duration_s=10, **kw), p)
         print(f"\n##### {title}")
         r = analyze(p, store=store, uid="demo", machine_name="Field pump", mode=mode, lang=args.lang, settings=s,
                     make_visual=mode in ("before_repair",))

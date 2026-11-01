@@ -32,6 +32,10 @@ SCENARIOS = {
     "healthy": dict(seed=21), "bearing": dict(seed=22, fault="bearing"),
     "imbalance": dict(seed=23, fault="imbalance", fault_severity=2.0), "cavitation": dict(seed=24, fault="cavitation"),
     "dark": dict(seed=25, brightness=0.08), "shaky": dict(seed=26, shake_px=40.0),
+    "early_wear": dict(seed=27, fault="bearing", fault_severity=0.3),
+    "noisy_background": dict(seed=28, ambient_hiss=0.05),
+    "ambient": dict(seed=29, ambient_hiss=0.05, machine_on=False),
+    "moved": dict(seed=30, view_scale=1.3),
 }
 
 
@@ -143,6 +147,8 @@ def create_app(settings=None, store=None, graph_transport=None, llm=None) -> Fas
                                     mode="baseline", lang=lang, make_voice=False, make_visual=False)
             built += 1
         p = await run_in_threadpool(sim, scenario, **SCENARIOS[scenario])
+        if scenario == "ambient":
+            mode = "ambient"
         report = await run_analysis(path=p, uid=uid, machine_name=DEMO_MACHINE, mode=mode, lang=lang)
         report["demo"] = {"scenario": scenario, "baselines_built_now": built, "simulated": True}
         return public(report)

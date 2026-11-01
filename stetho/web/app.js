@@ -32,6 +32,7 @@
     technician: ["b-act", "⚠", "Ask a technician to inspect", "A clear change or strong pattern was found."],
     no_reference: ["b-info", "?", "Can't judge yet: no healthy reference", "Save healthy recordings first."],
     repair_check: ["b-info", "⇄", "Repair check", ""],
+    ambient_saved: ["b-ok", "♪", "Background noise saved", "Now switch the machine on and record from the same spot."],
   };
   const REPAIR = {
     back_to_baseline: ["b-ok", "Back close to its healthy reference"],
@@ -114,7 +115,11 @@
     if (a.decision === "repair_check") {
       const rp = REPAIR[(a.repair || {}).status || "not_available"]; cls = rp[0]; sub = rp[1];
     }
-    const banner = $("banner"); banner.className = `banner ${cls}`; banner.replaceChildren(
+    const spotStatus = (a.spot || {}).status;
+    if (spotStatus === "moved") sub += " Note: the phone was not at the usual spot, so movement was not compared.";
+    if (spotStatus === "different_view") sub += " Note: this view doesn't match the reference. Is it the same machine?";
+    if ((a.trend || {}).status === "rising") sub += " The trend across checks is rising.";
+        const banner = $("banner"); banner.className = `banner ${cls}`; banner.replaceChildren(
       el("span", { class: "icon", "aria-hidden": "true" }, icon),
       el("div", {}, title, r.simulated_input ? el("span", { class: "sim" }, "SIMULATED INPUT") : "", el("small", {}, sub)));
 
@@ -131,6 +136,8 @@
     $("findings").replaceChildren(...fs);
 
     zChart(a.comparison);
+    contextList(a);
+    historyChart(r.history || [], a.trend || {});
     spectrum(r.motion_spectrum, r.motion);
     const xm = a.cross_modal || {};
     $("xmodal").textContent = xm.status && xm.status !== "not_available"
@@ -171,6 +178,47 @@
       const v = svgEl("text", { x: z >= 0 ? sx(z) + 4 : sx(z) - 4, y: y + 13, "text-anchor": z >= 0 ? "start" : "end" }); v.textContent = (Math.abs(z) < 0.05 ? 0 : z).toFixed(1); s.append(v);
     });
     const ax = svgEl("text", { x: sx(0), y: H - 4, "text-anchor": "middle" }); ax.textContent = `0 = same as healthy reference · ${cmp.n_baselines} reference recording(s)`; s.append(ax);
+    host.replaceChildren(s);
+  }
+
+  function contextList(a) {
+    const sp = a.spot || {}, am = a.ambient || {}, tr = a.trend || {};
+    const SPOT = { same_spot: ["ok", "Same spot as the healthy reference"],
+      moved: ["warn", "Phone was not at the usual spot. Movement was not compared"],
+      different_view: ["warn", "View doesn't match the reference. Is this the same machine?"],
+      not_available: ["info", "No reference view yet"] };
+    const s = SPOT[sp.status] || SPOT.not_available;
+    const items = [el("li", {}, el("span", { class: `st st-${s[0]}` }, s[0]), " " + s[1] +
+      (sp.scale ? ` (scale ${sp.scale}, shift ${Math.round(sp.shift_frac * 100)}% of width)` : ""))];
+    if (am.status === "applied") items.push(el("li", {}, el("span", { class: `st st-${am.excluded.length ? "warn" : "ok"}` }, am.excluded.length ? "warn" : "ok"),
+      ` Background reference (${am.age_min} min old): machine ${am.overall_margin_db} dB above background` +
+      (am.excluded.length ? `; ignored ${am.excluded.length} sound measurement(s) drowned by background` : "")));
+    else if (am.status === "mismatch") items.push(el("li", {}, el("span", { class: "st st-warn" }, "warn"), " Saved background reference no longer matches. Not used"));
+    else items.push(el("li", {}, el("span", { class: "st st-info" }, "info"), " No background reference (optional: save one with the machine off)"));
+    items.push(el("li", {}, el("span", { class: `st st-${tr.status === "rising" ? "warn" : "ok"}` }, tr.status === "rising" ? "warn" : tr.status === "steady" ? "ok" : "info"),
+      tr.status === "rising" ? ` Trend: rising over ${tr.n} checks` : tr.status === "steady" ? ` Trend: steady over ${tr.n} checks` : " Trend: needs 4 or more checks"));
+    $("context").replaceChildren(...items);
+  }
+
+  function historyChart(hist, trend) {
+    const host = $("history");
+    const pts = hist.filter((h) => h.distance !== null && h.distance !== undefined);
+    if (pts.length < 2) { host.replaceChildren(el("p", { class: "muted small" }, "Not enough compared checks yet.")); return; }
+    const W = 640, H = 170, l = 36, b = 22, top = 10;
+    const ymax = Math.max(4, ...pts.map((p) => p.distance));
+    const sx = (i) => l + (i / Math.max(1, pts.length - 1)) * (W - l - 12), sy = (v) => H - b - (v / ymax) * (H - b - top);
+    const s = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Distance from healthy reference over checks" });
+    s.append(svgEl("line", { x1: l, x2: W - 12, y1: sy(3), y2: sy(3), stroke: "var(--muted)", "stroke-dasharray": "4 3" }));
+    const t3 = svgEl("text", { x: W - 12, y: sy(3) - 4, "text-anchor": "end" }); t3.textContent = "clearly different"; s.append(t3);
+    s.append(svgEl("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${sx(i).toFixed(1)},${sy(p.distance).toFixed(1)}`).join(""),
+      fill: "none", stroke: trend.status === "rising" ? "var(--watch)" : "var(--series-1)", "stroke-width": 2 }));
+    pts.forEach((p, i) => {
+      const c = svgEl("circle", { cx: sx(i), cy: sy(p.distance), r: 4, fill: p.kind === "after_repair" ? "var(--ok)" : p.kind === "baseline" ? "var(--series-2)" : "var(--series-1)" });
+      const tt = svgEl("title"); tt.textContent = `${p.kind}: ${p.decision} (distance ${p.distance})`; c.append(tt); s.append(c);
+    });
+    const yl = svgEl("text", { x: 2, y: sy(0) }); yl.textContent = "0"; s.append(yl);
+    const xl = svgEl("text", { x: l, y: H - 4 }); xl.textContent = "older"; s.append(xl);
+    const xr = svgEl("text", { x: W - 12, y: H - 4, "text-anchor": "end" }); xr.textContent = "latest"; s.append(xr);
     host.replaceChildren(s);
   }
 

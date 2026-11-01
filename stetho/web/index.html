@@ -50,6 +50,7 @@
         <label class="radio"><input type="radio" name="mode" value="baseline"> a <b>healthy reference</b> (machine working well)</label>
         <label class="radio"><input type="radio" name="mode" value="before_repair"> just <b>before a repair</b></label>
         <label class="radio"><input type="radio" name="mode" value="after_repair"> just <b>after a repair</b></label>
+        <label class="radio"><input type="radio" name="mode" value="ambient"> a <b>background-noise reference</b> (machine switched <b>off</b>, phone at the usual spot)</label>
       </fieldset>
       <button type="submit" class="primary" id="go">Check this recording</button>
     </form>
@@ -64,6 +65,10 @@
         <button data-demo="cavitation">Cavitation crackle</button>
         <button data-demo="dark">Too dark</button>
         <button data-demo="shaky">Very shaky</button>
+        <button data-demo="early_wear">Early wear (slight knock)</button>
+        <button data-demo="noisy_background">New background hiss</button>
+        <button data-demo="ambient">Save background (machine off)</button>
+        <button data-demo="moved">Phone moved closer</button>
       </div>
       <label class="inline"><input type="checkbox" id="demoAfter"> treat as “after repair”</label>
     </div>
@@ -87,6 +92,11 @@
       <p class="muted small">Image-plane displacement in pixels, after cancelling camera shake. This is not millimetres, velocity or acceleration. The grey line is the noise floor measured on background points.</p>
       <div id="spectrum" class="chart"></div>
       <div id="xmodal" class="small"></div>
+      <h4>Same spot and background</h4>
+      <ul id="context" class="quality"></ul>
+      <h4>This machine over time</h4>
+      <p class="muted small">Distance from its healthy reference after each check (0 = identical; about 3 or more means clearly different). A steady rise is flagged even if each check alone looks fine.</p>
+      <div id="history" class="chart"></div>
       <h4>Recording quality</h4>
       <ul id="quality" class="quality"></ul>
     </details>

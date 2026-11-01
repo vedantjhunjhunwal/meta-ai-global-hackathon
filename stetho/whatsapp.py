@@ -18,6 +18,8 @@ Conversation commands (case-insensitive; Hindi keywords also accepted):
   BASELINE             next video is a healthy reference
   BEFORE REPAIR        next video is just before a repair
   AFTER REPAIR         next video is just after a repair
+  AMBIENT              next video is a background-noise reference (machine switched OFF)
+  HISTORY              recent results and trend for the current machine
   RPM <n>              rated speed from the nameplate
   CONFIRM              accept nameplate values read from a photo
   TECH                 technician summary of the last result
@@ -72,6 +74,11 @@ MSG = {
         "confirmed": "Saved nameplate details for {machine}.",
         "no_tech": "No recent result yet. Send a video first.",
         "follow_tech": "Reply TECH for a technician summary you can forward.",
+        "ambient_howto": "Switch the machine OFF (only if that is safe), keep the phone at the usual spot, and send a 10-second video. Then switch it on and send the check video.",
+        "history_none": "No saved results for {machine} yet.",
+        "history_head": "Recent results for {machine}:",
+        "trend_rising": "Trend: slowly moving away from its healthy reference.",
+        "trend_steady": "Trend: steady.",
     },
     "hi": {
         "consent": ("नमस्ते, मैं Stetho हूँ। चलते पंप या मोटर का 10 सेकंड का वीडियो भेजें, मैं आवाज़ में बताऊँगा कि "
@@ -101,10 +108,25 @@ MSG = {
         "confirmed": "{machine} की नेमप्लेट जानकारी सहेज ली।",
         "no_tech": "अभी कोई नतीजा नहीं है। पहले वीडियो भेजें।",
         "follow_tech": "मिस्त्री को भेजने लायक़ सारांश के लिए TECH लिखें।",
+        "ambient_howto": "मशीन बंद करें (सिर्फ़ अगर सुरक्षित हो), फ़ोन रोज़ की जगह रखें, और 10 सेकंड का वीडियो भेजें। फिर मशीन चालू करके जाँच वाला वीडियो भेजें।",
+        "history_none": "{machine} के लिए अभी कोई नतीजा सहेजा नहीं गया है।",
+        "history_head": "{machine} के हाल के नतीजे:",
+        "trend_rising": "रुझान: धीरे-धीरे ठीक हालत से दूर जा रही है।",
+        "trend_steady": "रुझान: स्थिर।",
     },
 }
-MODE_NAMES = {"en": {"baseline": "healthy reference", "before_repair": "before repair", "after_repair": "after repair"},
-              "hi": {"baseline": "ठीक हालत का संदर्भ", "before_repair": "मरम्मत से पहले", "after_repair": "मरम्मत के बाद"}}
+MODE_NAMES = {"en": {"baseline": "healthy reference", "before_repair": "before repair", "after_repair": "after repair",
+                     "ambient": "background-noise reference"},
+              "hi": {"baseline": "ठीक हालत का संदर्भ", "before_repair": "मरम्मत से पहले", "after_repair": "मरम्मत के बाद",
+                     "ambient": "आसपास के शोर का संदर्भ"}}
+DECISION_WORDS = {
+    "en": {"baseline_saved": "healthy reference saved", "ambient_saved": "background reference saved",
+           "no_change": "no change", "watch": "small change", "technician": "technician advised",
+           "no_reference": "no reference yet", "repair_check": "repair check"},
+    "hi": {"baseline_saved": "संदर्भ सहेजा", "ambient_saved": "शोर संदर्भ सहेजा", "no_change": "कोई बदलाव नहीं",
+           "watch": "थोड़ा बदलाव", "technician": "मिस्त्री की सलाह", "no_reference": "अभी संदर्भ नहीं",
+           "repair_check": "मरम्मत जाँच"},
+}
 
 
 def verify_signature(raw: bytes, header: str | None, app_secret: str) -> bool:
@@ -250,11 +272,17 @@ class Bot:
             self.last_tech.pop(uid, None)
             self._say(to, lang, "deleted", n=n)
             return "deleted"
-        modes = {"BASELINE": "baseline", "BEFORE REPAIR": "before_repair", "AFTER REPAIR": "after_repair"}
+        modes = {"BASELINE": "baseline", "BEFORE REPAIR": "before_repair", "AFTER REPAIR": "after_repair",
+                 "AMBIENT": "ambient", "BACKGROUND": "ambient"}
         if cmd in modes:
             self.store.update_user(uid, pending_mode=modes[cmd])
             self._say(to, lang, "mode_set", machine=name, mode=MODE_NAMES[lang][modes[cmd]])
+            if modes[cmd] == "ambient":
+                self._say(to, lang, "ambient_howto")
             return "mode"
+        if cmd in ("HISTORY", "इतिहास"):
+            self.graph.send_text(to, self._history_text(lang, machine))
+            return "history"
         m = re.match(r"^MACHINE\s+(.{1,40})$", text, re.I)
         if m:
             self.store.update_user(uid, current_machine=m.group(1).strip())
@@ -278,6 +306,20 @@ class Bot:
             return "tech"
         self._say(to, lang, "guide")
         return "guide"
+
+    def _history_text(self, lang, machine) -> str:
+        recs = self.store.recordings(machine["mid"])
+        if not recs:
+            return MSG[lang]["history_none"].format(machine=machine["name"])
+        lines = [MSG[lang]["history_head"].format(machine=machine["name"])]
+        for r in recs[-6:]:
+            day = time.strftime("%Y-%m-%d", time.gmtime(r["created"]))
+            dec = (r.get("assessment") or {}).get("decision", "")
+            lines.append(f"{day}: {DECISION_WORDS[lang].get(dec, dec)}")
+        trend = (recs[-1].get("assessment") or {}).get("trend", {}).get("status")
+        if trend in ("rising", "steady"):
+            lines.append(MSG[lang][f"trend_{trend}"])
+        return "\n".join(lines)
 
     def _nameplate(self, to, lang, msg, machine) -> str:
         if self.llm is None:

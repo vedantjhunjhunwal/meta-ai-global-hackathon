@@ -17,6 +17,7 @@
 - Detection of the codec's I/P/B picture-type cycle and accounting for its alias family (see finding below).
 - Audio features: mains detection (50/60 Hz), harmonic-comb shaft-speed estimate (with nameplate constraint), gain-robust shape features, impulsiveness and envelope periodicity.
 - Machine-specific baseline comparison (robust z-scores with repeatability floors), change grading, operating-condition checks, repair verdict.
+- Same-spot check (ORB fingerprint + RANSAC similarity), background-noise masking from a machine-off reference (with stale-reference detection), and Theil–Sen drift detection across checks.
 - Rule-based assessment with abstention; template explanations (English, Hindi); guarded LLM rewrite; voice note; stabilised motion magnification.
 - WhatsApp webhook flow (consent, commands, dedupe, timeouts, provider failures), web UI, CLI, privacy controls.
 
@@ -26,6 +27,9 @@
 - That broadband impulsive crackle in phone audio is associated with pump cavitation.
 - That audio shaft-speed estimates are reliable enough on farms to resolve video aliasing.
 - All absolute thresholds in `assessment.ABS` and `quality.THRESHOLDS`. They were tuned on *simulated* data only.
+- The same-spot tolerances (±12% scale, 6°, 12% shift) are small enough that movement features stay comparable on real machines.
+- A 6 dB machine-over-background margin is enough to trust a band from uncalibrated phone audio. Phone AGC makes cross-recording level comparisons approximate. The direction of error is usually towards excluding more.
+- The drift rules (slope, agreement, rise) give earlier warning without more false alarms on real machines. In simulation they flagged rising wear one check before the per-check rule reached "clear".
 
 ### Planned, not implemented
 - Scale reference (printed marker of known size) to convert pixels to mm at the marker plane.

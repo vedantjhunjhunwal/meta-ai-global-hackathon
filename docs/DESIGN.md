@@ -21,6 +21,18 @@ The repository was empty when this work began: no code, README or tests. Everyth
 - **Supporting innovation B: #4, a quality gate with abstention.** Bad recordings get specific re-recording advice, not a guess.
 - Escalation (#5) is reduced to a forwardable **technician summary**: plain evidence and hypotheses in technical English.
 
+### Second iteration: making the baseline idea robust
+
+The baseline comparison assumes three things that often fail in the field. Each now has a guard:
+
+| Assumption | What breaks it | Guard |
+|-----------|----------------|-------|
+| Same viewpoint | The owner stands somewhere else, zooms, or tilts the phone | `spot.py`: ORB view fingerprint vs. baseline view; similarity transform → same_spot / moved (with hint) / different_view; video features excluded unless same_spot |
+| Same acoustic environment | A generator, another pump, insects, wind | `AMBIENT` recording with the machine off; per-band margin ≥ 6 dB or the feature is excluded; mismatch detection when the reference is stale |
+| Change shows up in one check | Slow wear stays below the per-check threshold for weeks | `baseline.drift`: Theil–Sen slope ≥ 0.15/check, ≥ 75% of pairs rising, rise ≥ 0.8, at least 4 checks since the last repair |
+
+These are deliberately "boring" engineering features. They don't add new AI claims. They make the one claim Stetho does make, *this machine changed relative to itself*, harder to fool.
+
 ### Narrow initial scope
 
 - **Machine:** electric monoblock / close-coupled centrifugal water pumps, roughly 0.5–5 HP, 2-pole (≈2,850–2,950 rpm on 50 Hz) or 4-pole. These are common on small farms and in small workshops.

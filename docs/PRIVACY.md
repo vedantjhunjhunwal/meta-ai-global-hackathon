@@ -5,6 +5,7 @@
 | Uploaded video/audio | **No, by default.** Deleted right after analysis (`STETHO_RETAIN_MEDIA_HOURS=0`). | `var/media/` only while processing |
 | Phone number | **No.** Replaced with HMAC-SHA256(salt, number), truncated. | Pseudonymous id in SQLite |
 | Derived features, quality checks, assessment | Yes, needed for baseline comparison | SQLite `var/stetho.db` until the user deletes them |
+| View fingerprint (same-spot check) | Yes: up to 300 ORB keypoint positions + binary descriptors from the first frame. **Not an image.** | Stored with the recording's features; removed by `DELETE` |
 | Voice note / magnified clip | Temporarily, for delivery | `var/artifacts/`. Web demo removes them after `STETHO_ARTIFACT_TTL_HOURS` (default 24 h) |
 | Technician summary of the last result | In memory only | Lost on restart |
 | Language-model calls (optional) | The **text template** (no video, audio or phone number) and, only when the user sends a nameplate photo, that photo | Sent to Meta Model API under Meta's terms. Disabled when `MODEL_API_KEY` is unset |

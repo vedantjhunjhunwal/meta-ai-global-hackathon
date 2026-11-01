@@ -25,8 +25,11 @@ Point at:
 Open **See the movement**.
 > "Here's the movement amplified twenty times and slowed down. It helps a mechanic see where to look. It's a visual aid, not a measurement. The motion chart is in pixels, and the grey line is the noise floor measured on background points in the same video."
 
-**1:50–2:15 · Abstention** (click **Too dark**)
+**1:50–2:05 · Abstention** (click **Too dark**)
 > "When the recording is bad, Stetho doesn't guess. It says exactly how to re-record: more light, hold still. No diagnosis comes out of a bad recording."
+
+**2:05–2:15 · Harder to fool** (click **New background hiss**, then **Save background (machine off)**, then **New background hiss** again)
+> "Same recording twice. Without a background reference, a new generator nearby looks like a change, and Stetho tells you how to check. With a ten-second machine-off reference, the drowned sounds are ignored and the answer is 'no change'. It also notices if you recorded from the wrong spot, and flags slow wear as a rising trend before any single check crosses the clear-change line."
 
 **2:15–2:40 · Repair verification** (tick "treat as after repair", click **Healthy**)
 > "After the bearing is replaced, the owner sends another video and says AFTER REPAIR. Stetho compares it with the healthy reference and with the before-repair recording: back close to its own normal. Note the wording: it doesn't claim the cause is fixed. It says the machine sounds and moves like its healthy self again, and to check again in a week."

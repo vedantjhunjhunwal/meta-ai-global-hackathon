@@ -56,6 +56,11 @@ Record a switched-off pump and a rigid block with the same matrix, to measure th
 ### 4.5 Repair sequences
 For each induced fault: baseline (×3), fault (×3), fault removed (×3), on the same day and again the next day.
 
+### 4.6a Robustness features
+- **Same-spot check:** for each phone, record at the marked spot and at controlled offsets (10, 20, 40 cm sideways; ±15% distance; 5°/10° tilt). Measure the false "moved" rate at the marked spot and the detection rate per offset, and confirm that video-feature spread at "same_spot" matches the repeatability study.
+- **Background reference:** with the pump healthy, introduce a controlled second source (a portable generator or a speaker playing recorded pump/generator/insect noise at set levels). Compare the false-alarm rate without and with an `AMBIENT` reference, and the recall loss for induced faults whose evidence falls in excluded bands.
+- **Drift:** run a seeded bearing-wear progression (or graded looseness) across ≥ 6 sessions. Measure how many sessions earlier the trend flags vs. the per-check rule, and the false "rising" rate over ≥ 10 healthy sessions per machine.
+
 ### 4.6 Codec characterisation
 On the rig, compare each phone's original file vs. WhatsApp-video vs. WhatsApp-document for the same take. Record the picture-type pattern and the visible-motion spectrum (see SCIENCE.md, compression finding).
 
@@ -75,6 +80,7 @@ Compare Stetho against:
 5. **No quality gate** (analyse everything).
 6. **With vs. without the LLM rewrite** (check that decisions are identical; they must be, by design).
 7. 1 vs. 3 vs. 5 baseline recordings.
+8. With vs. without the same-spot gate, the background reference, and drift detection.
 
 ## 7. Metrics
 

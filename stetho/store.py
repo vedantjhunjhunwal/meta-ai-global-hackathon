@@ -113,6 +113,7 @@ class Store:
         rows = self._q(sql + " ORDER BY created", args)
         for r in rows:
             r["features"] = json.loads(r["features"])
+            r["assessment"] = json.loads(r["assessment"]) if r.get("assessment") else {}
         return rows
 
     def baselines(self, mid: str) -> list[dict]:

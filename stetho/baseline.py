@@ -57,6 +57,9 @@ def extract(audio, motion) -> dict:
             f["a.harmonic_2x_db"] = audio.harmonic_rel_db.get("2x")
             ctx["shaft_hz"] = audio.shaft_hz
         ctx["mains_hz"] = audio.mains_hz
+        ctx["band_level_dbfs"] = [round(v, 2) for v in audio.band_level_dbfs]
+        ctx["hf_level_dbfs"] = round(audio.hf_level_dbfs, 2)
+        ctx["rms_dbfs"] = round(audio.rms_dbfs, 2)
     if motion is not None and motion.ok and motion.detected:
         f["v.peak_amp_db"] = float(20 * np.log10(motion.peak_amp_px + 1e-9))
         f["v.band_rms_db"] = float(20 * np.log10(motion.band_rms_px + 1e-9))
@@ -80,7 +83,14 @@ class Comparison:
         return self.__dict__.copy()
 
 
-def compare(current: dict, baselines: list[dict]) -> Comparison:
+def compare(current: dict, baselines: list[dict], exclude: set | None = None) -> Comparison:
+    """Robust z-scores of `current` against this machine's baselines.
+
+    `exclude` names features that must not be compared for this recording
+    (e.g. bands masked by background noise, or video features when the phone
+    was not at the usual spot).
+    """
+    exclude = exclude or set()
     cmp = Comparison(n_baselines=len(baselines))
     if not baselines:
         cmp.change = "not_compared"
@@ -103,6 +113,9 @@ def compare(current: dict, baselines: list[dict]) -> Comparison:
     zs = []
     for name, (group, unit, floor, worse) in FEATURES.items():
         if name not in cur_f:
+            continue
+        if name in exclude:
+            cmp.excluded.append(name)
             continue
         if group == "visible_motion" and not video_comparable:
             cmp.excluded.append(name)
@@ -155,3 +168,75 @@ def repair_verdict(before: Comparison | None, after: Comparison) -> dict:
     else:
         status = "no_clear_change"
     return {"status": status, "distance_before": b, "distance_after": a}
+
+
+# --- Background-noise reference ("AMBIENT": a short recording with the machine off) ---
+AMBIENT_MARGIN_DB = 6.0  # a band must be this much louder than background to be trusted
+AMBIENT_MAX_AGE_H = 12.0
+AMBIENT_MISMATCH_DB = 6.0
+HF_FEATURES = ("a.hf_energy_ratio_db", "a.hf_kurtosis", "a.hf_crest_db", "a.envelope_prominence_db")
+
+
+def ambient_mask(current: dict, ambient: dict | None) -> dict:
+    """Which audio features are dominated by background noise in this recording?
+
+    Compares absolute band levels of the check with a machine-off recording
+    from the same phone. Phone gain control usually boosts a quiet recording,
+    which makes the background look *louder* - so errors here tend towards
+    excluding more, not less. Uncalibrated; see docs/SCIENCE.md.
+    """
+    cur = current.get("context", {})
+    amb = (ambient or {}).get("context", {})
+    if not amb.get("band_level_dbfs") or not cur.get("band_level_dbfs"):
+        return {"status": "not_available", "excluded": []}
+    excluded, margins = [], {}
+    # Sources add: with the machine running, no band should be clearly quieter than
+    # the machine-off background. If one is, the background has changed since the
+    # reference (or gain control differs too much) - don't apply a stale reference.
+    diffs = [c - a for c, a in zip(cur["band_level_dbfs"], amb["band_level_dbfs"])]
+    if min(diffs) < -AMBIENT_MISMATCH_DB:
+        return {"status": "mismatch", "excluded": [], "min_band_margin_db": round(min(diffs), 1)}
+    for (lo, hi), c, a in zip(zip(BANDS_HZ[:-1], BANDS_HZ[1:]), cur["band_level_dbfs"], amb["band_level_dbfs"]):
+        margins[f"{lo}-{hi}"] = round(c - a, 1)
+        if c - a < AMBIENT_MARGIN_DB:
+            excluded.append(f"a.band_{lo}_{hi}")
+    hf_margin = None
+    if cur.get("hf_level_dbfs") is not None and amb.get("hf_level_dbfs") is not None:
+        hf_margin = round(cur["hf_level_dbfs"] - amb["hf_level_dbfs"], 1)
+        if hf_margin < AMBIENT_MARGIN_DB:
+            excluded += list(HF_FEATURES)
+    overall = None
+    if cur.get("rms_dbfs") is not None and amb.get("rms_dbfs") is not None:
+        overall = round(cur["rms_dbfs"] - amb["rms_dbfs"], 1)
+    return {"status": "applied", "excluded": excluded, "band_margin_db": margins, "hf_margin_db": hf_margin,
+            "overall_margin_db": overall}
+
+
+# --- Slow drift across checks ---
+DRIFT_MIN_POINTS = 4
+DRIFT_MIN_SLOPE = 0.15  # distance units per check
+DRIFT_MIN_AGREEMENT = 0.75  # share of later-vs-earlier pairs that increased
+DRIFT_MIN_RISE = 0.8
+
+
+def drift(distances: list[float]) -> dict:
+    """Theil-Sen trend of distance-from-healthy over consecutive checks.
+
+    Catches slow change that never crosses the per-check threshold. Needs at
+    least DRIFT_MIN_POINTS checks; the caller resets the series after a repair.
+    """
+    d = [float(x) for x in distances if x is not None][-8:]
+    if len(d) < DRIFT_MIN_POINTS:
+        return {"status": "insufficient", "n": len(d), "values": d}
+    slopes, ups, pairs = [], 0, 0
+    for i in range(len(d)):
+        for j in range(i + 1, len(d)):
+            slopes.append((d[j] - d[i]) / (j - i))
+            ups += d[j] > d[i]
+            pairs += 1
+    slope = float(np.median(slopes))
+    agreement = ups / pairs
+    rise = d[-1] - min(d[:-1])
+    rising = slope >= DRIFT_MIN_SLOPE and agreement >= DRIFT_MIN_AGREEMENT and rise >= DRIFT_MIN_RISE
+    return {"status": "rising" if rising else "steady", "n": len(d), "slope_per_check": round(slope, 3),
+            "agreement": round(agreement, 2), "values": [round(x, 2) for x in d]}

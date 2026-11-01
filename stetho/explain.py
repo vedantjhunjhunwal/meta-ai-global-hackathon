@@ -93,6 +93,22 @@ T = {
         "a.send_as_document": "send the video as a document to avoid compression",
         "a.use_slow_motion": "use slow-motion mode if your phone has it",
         "a.send_video_not_audio": "send a video, not only audio",
+        "head.ambient_saved": "I saved this as the background-noise reference for {machine}. Now switch the machine on and send the check video from the same spot.",
+        "f.gradual_drift": "Over the last few checks, {machine} has been slowly moving away from its healthy reference, even though each check alone looked acceptable.",
+        "u.different_spot": "This video was not taken from the usual spot, so I compared only the sound, not the movement.",
+        "u.ambient_masks_bands": "Some background noise was as loud as the machine, so I ignored those sounds.",
+        "u.machine_barely_audible": "The machine was hardly louder than the background noise, so this check is less sure.",
+        "n.ambient_then_record": "Keep the phone in the same place for the next video.",
+        "n.record_from_marked_spot": "Next time, record from the marked spot:",
+        "n.drift_consider_technician": "If the next check continues this trend, ask a technician to inspect it.",
+        "n.check_background_noise": "Only the sound changed. If there is new noise nearby, such as a generator, send AMBIENT and a 10-second video with the machine switched off, then check again.",
+        "n.confirm_same_machine": "This place looks different from the reference. If this is a different machine, reply MACHINE and its name.",
+        "n.record_new_ambient": "The background noise has changed. If it is noisy, send AMBIENT and a 10-second video with the machine switched off.",
+        "u.ambient_reference_mismatch": "The saved background-noise recording no longer matches, so I did not use it.",
+        "a.move_back": "move a little further back",
+        "a.move_closer": "move a little closer",
+        "a.move_sideways": "move to the side so the machine is where it usually is in the picture",
+        "a.level_phone": "keep the phone straight, not tilted",
         "tech.title": "Technician summary (screening evidence, not a diagnosis)",
     },
     "hi": {
@@ -170,6 +186,22 @@ T = {
         "a.send_as_document": "वीडियो को डॉक्यूमेंट की तरह भेजें ताकि उसकी क्वालिटी कम न हो",
         "a.use_slow_motion": "अगर फ़ोन में स्लो-मोशन मोड है तो उसका इस्तेमाल करें",
         "a.send_video_not_audio": "सिर्फ़ आवाज़ नहीं, वीडियो भेजें",
+        "head.ambient_saved": "मैंने इसे {machine} के आसपास के शोर का संदर्भ बनाकर सहेज लिया है। अब मशीन चालू करें और उसी जगह से जाँच वाला वीडियो भेजें।",
+        "f.gradual_drift": "पिछली कुछ जाँचों में {machine} धीरे-धीरे अपनी ठीक हालत से दूर जा रही है, भले ही हर जाँच अकेले ठीक लगी।",
+        "u.different_spot": "यह वीडियो रोज़ की जगह से नहीं लिया गया, इसलिए मैंने सिर्फ़ आवाज़ की तुलना की, हिलने की नहीं।",
+        "u.ambient_masks_bands": "आसपास का कुछ शोर मशीन जितना ही तेज़ था, इसलिए मैंने उन आवाज़ों को छोड़ दिया।",
+        "u.machine_barely_audible": "मशीन की आवाज़ आसपास के शोर से मुश्किल से ज़्यादा थी, इसलिए यह जाँच कम पक्की है।",
+        "n.ambient_then_record": "अगले वीडियो के लिए फ़ोन उसी जगह रखें।",
+        "n.record_from_marked_spot": "अगली बार निशान वाली जगह से रिकॉर्ड करें:",
+        "n.drift_consider_technician": "अगर अगली जाँच में भी यही रुझान रहे, तो मिस्त्री से जाँच करवाएँ।",
+        "n.check_background_noise": "सिर्फ़ आवाज़ बदली है। अगर पास में कोई नया शोर है, जैसे जनरेटर, तो AMBIENT लिखें और मशीन बंद करके 10 सेकंड का वीडियो भेजें, फिर दोबारा जाँच करें।",
+        "n.confirm_same_machine": "यह जगह संदर्भ से अलग दिख रही है। अगर यह दूसरी मशीन है, तो MACHINE और उसका नाम लिखें।",
+        "n.record_new_ambient": "आसपास का शोर बदल गया है। अगर शोर ज़्यादा है, तो AMBIENT लिखें और मशीन बंद करके 10 सेकंड का वीडियो भेजें।",
+        "u.ambient_reference_mismatch": "सहेजी गई शोर वाली रिकॉर्डिंग अब मेल नहीं खाती, इसलिए मैंने उसका इस्तेमाल नहीं किया।",
+        "a.move_back": "थोड़ा पीछे हटें",
+        "a.move_closer": "थोड़ा पास आएँ",
+        "a.move_sideways": "थोड़ा बगल में जाएँ ताकि मशीन तस्वीर में रोज़ की तरह दिखे",
+        "a.level_phone": "फ़ोन सीधा रखें, टेढ़ा नहीं",
         "tech.title": "Technician summary (screening evidence, not a diagnosis)",
     },
 }
@@ -227,7 +259,7 @@ def render(assessment: dict, lang: str = "en", machine: str = "your machine", au
     for fnd in assessment["findings"][:2]:
         order = next((e["value"] for e in fnd["evidence"] if e["label"] == "knocks_per_turn"), None)
         key = "f.repeating_knocks_order" if fnd["id"] == "repeating_knocks" and order else f"f.{fnd['id']}"
-        lines.append(_t(lang, key, order=order))
+        lines.append(_t(lang, key, order=order, machine=machine))
         lines.append(_t(lang, f"strength.{fnd['strength']}"))
         if fnd.get("hypotheses"):
             items = ", ".join(_t(lang, f"hyp.{h}") for h in fnd["hypotheses"][:3])
@@ -235,10 +267,14 @@ def render(assessment: dict, lang: str = "en", machine: str = "your machine", au
     if d not in ("rerecord", "baseline_saved"):
         lines.append(_t(lang, "u.screening"))
         for lim in assessment["limitations"]:
-            if lim in ("few_baselines", "operating_condition_differs", "no_audio_evidence"):
+            if lim in ("few_baselines", "operating_condition_differs", "no_audio_evidence", "different_spot",
+                       "ambient_masks_bands", "machine_barely_audible", "ambient_reference_mismatch"):
                 lines.append(_t(lang, f"u.{lim}", **kw))
     for step in assessment["next_steps"]:
-        if step != "record_again_guided":
+        if step == "record_from_marked_spot":
+            hint = (assessment.get("spot") or {}).get("hint")
+            lines.append(_t(lang, "n.record_from_marked_spot") + (" " + _t(lang, f"a.{hint}") + "." if hint else ""))
+        elif step != "record_again_guided":
             lines.append(_t(lang, f"n.{step}"))
     safety = [_t(lang, f"s.{s}") for s in ("no_touch_running", "switch_off_if_smoke")]
     # Safety lines are kept outside `body` so an LLM rewrite can never drop them.
@@ -270,6 +306,18 @@ def technician_summary(assessment: dict, audio=None) -> str:
                    f"distance={cmp['distance']}.")
         for n in cmp.get("notable", []):
             out.append(f"  {n['feature']}: {n['value']} vs baseline {n['baseline']} {n['unit']} (z={n['z']})")
+    sp = assessment.get("spot") or {}
+    if sp.get("status") not in (None, "not_available"):
+        out.append(f"Same-spot check: {sp['status']}" + (f" (scale {sp.get('scale')}, rotation {sp.get('rotation_deg')} deg, "
+                   f"shift {sp.get('shift_frac')} of width)" if "scale" in sp else ""))
+    amb = assessment.get("ambient") or {}
+    if amb.get("status") == "applied":
+        out.append(f"Background reference ({amb.get('age_min')} min old): overall margin {amb.get('overall_margin_db')} dB; "
+                   f"excluded: {', '.join(amb['excluded']) or 'none'}")
+    tr = assessment.get("trend") or {}
+    if tr.get("status") in ("rising", "steady"):
+        out.append(f"Trend over {tr['n']} checks: {tr['status']} (Theil-Sen slope {tr['slope_per_check']}/check, "
+                   f"agreement {tr['agreement']}); distances {tr['values']}")
     for f in assessment["findings"]:
         out.append(f"Pattern: {f['id']} [{f['strength']}, {f.get('basis')}] - hypotheses: {', '.join(f.get('hypotheses', []))}")
     out.append("Limitations: " + ", ".join(assessment["limitations"] or ["none recorded"]))

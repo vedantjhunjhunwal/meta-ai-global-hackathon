@@ -40,6 +40,8 @@ class AudioResult:
     shaft_prominence_db: float | None = None
     harmonic_rel_db: dict = field(default_factory=dict)  # "1x".."4x": dB re total power
     band_shape_db: list = field(default_factory=list)
+    band_level_dbfs: list = field(default_factory=list)  # absolute (uncalibrated) band levels
+    hf_level_dbfs: float | None = None
     hf_energy_ratio_db: float | None = None
     hf_kurtosis: float | None = None
     hf_crest_db: float | None = None
@@ -144,6 +146,7 @@ def analyze_audio(x: np.ndarray, sr: int, rpm_hint: float | None = None) -> Audi
     res.freqs = f[f <= 2000].tolist()
     res.psd_db = p_db[f <= 2000].tolist()
     res.band_shape_db = [_band_db(f, p, lo, hi, total) for lo, hi in zip(BANDS_HZ[:-1], BANDS_HZ[1:])]
+    res.band_level_dbfs = [_band_db(f, p, lo, hi, 1.0) for lo, hi in zip(BANDS_HZ[:-1], BANDS_HZ[1:])]
     res.spectral_flatness = float(stats.gmean(p[(f > 20) & (f < 8000)] + 1e-20) / np.mean(p[(f > 20) & (f < 8000)]))
 
     mains, mprom = estimate_mains(f, prom)
@@ -160,6 +163,7 @@ def analyze_audio(x: np.ndarray, sr: int, rpm_hint: float | None = None) -> Audi
     sos = signal.butter(4, [HF_BAND[0], hi_edge], btype="bandpass", fs=sr, output="sos")
     hf = signal.sosfiltfilt(sos, x)
     res.hf_energy_ratio_db = _band_db(f, p, HF_BAND[0], hi_edge, total)
+    res.hf_level_dbfs = _band_db(f, p, HF_BAND[0], hi_edge, 1.0)
     res.hf_kurtosis = float(stats.kurtosis(hf, fisher=False))
     res.hf_crest_db = float(20 * np.log10(np.abs(hf).max() / (np.sqrt(np.mean(hf ** 2)) + 1e-12)))
     env = np.abs(signal.hilbert(hf))

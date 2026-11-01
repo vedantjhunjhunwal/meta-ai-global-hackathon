@@ -14,14 +14,35 @@ from pathlib import Path
 
 from . import __version__
 from . import assessment as assess_mod
-from . import baseline, explain, magnify, media, quality, tts
+from . import baseline, explain, magnify, media, quality, spot, tts
 from .audio import analyze_audio
 from .config import Settings, get_settings
 from .motion import analyze_motion
 from .segment import get_segmenter
 from .synth import is_simulated
 
-MODES = ("check", "baseline", "before_repair", "after_repair")
+MODES = ("check", "baseline", "before_repair", "after_repair", "ambient")
+VIDEO_FEATURES = {"v.peak_amp_db", "v.band_rms_db"}
+
+
+def _history(store, mid: str) -> list[dict]:
+    out = []
+    for r in store.recordings(mid):
+        cmp = (r.get("assessment") or {}).get("comparison") or {}
+        out.append({"created": r["created"], "kind": r["kind"], "decision": (r.get("assessment") or {}).get("decision"),
+                    "distance": cmp.get("distance")})
+    return out
+
+
+def _drift_series(history: list[dict]) -> list[float]:
+    """Distances of routine checks since the most recent repair (a repair resets the trend)."""
+    series = []
+    for h in history:
+        if h["kind"] == "after_repair":
+            series = []
+        elif h["kind"] in ("check", "before_repair") and h["distance"] is not None:
+            series.append(h["distance"])
+    return series
 MAX_FRAMES = 2400  # caps CPU time for 240 fps clips (10 s)
 DISCLAIMER = ("Screening aid only. Uses uncalibrated phone video/audio; motion is in image pixels, not vibration "
               "units. Not a diagnosis. Findings need confirmation by a qualified technician.")
@@ -77,12 +98,39 @@ def analyze(path: str | Path, *, store=None, uid: str = "local", machine_name: s
     timer.lap("motion")
     audio = analyze_audio(audio_data.x, audio_data.sr, rpm_hint) if audio_data is not None else None
     checks += quality.audio_checks(pr, audio)
+    if mode == "ambient":
+        # Background-noise reference: only the soundtrack and length matter.
+        checks = [c for c in checks if c.id in ("duration", "audio", "audio_level", "audio_clipping")]
+        if audio is None or not audio.ok:
+            checks.append(quality.Check("audio", "fail", "missing", "", "keep_sound_on"))
     q_verdict = quality.verdict(checks)
     timer.lap("audio")
 
     feats = baseline.extract(audio, motion)
-    base_list = store.baselines(machine["mid"]) if store else []
-    cmp = baseline.compare(feats, base_list) if base_list else None
+    if video is not None:
+        feats["spot"] = spot.fingerprint(video.frames[0], region.box if region else None)
+    base_recs = store.recordings(machine["mid"], "baseline") if store else []
+    base_list = [r["features"] for r in base_recs]
+    exclude: set = set()
+    spot_cmp = {"status": "not_available"}
+    if base_recs and feats.get("spot"):
+        ref_spot = next((r["features"].get("spot") for r in base_recs if r["features"].get("spot")), None)
+        spot_cmp = spot.compare(feats["spot"], ref_spot)
+        if spot_cmp["status"] in ("moved", "different_view"):
+            exclude |= VIDEO_FEATURES
+    ambient_info = {"status": "not_available"}
+    if store and mode != "ambient":
+        amb = [r for r in store.recordings(machine["mid"], "ambient")
+               if time.time() - r["created"] <= baseline.AMBIENT_MAX_AGE_H * 3600]
+        if amb:
+            ambient_info = baseline.ambient_mask(feats, amb[-1]["features"])
+            ambient_info["age_min"] = round((time.time() - amb[-1]["created"]) / 60, 1)
+            exclude |= set(ambient_info["excluded"])
+    cmp = baseline.compare(feats, base_list, exclude) if base_list and mode != "ambient" else None
+    history = _history(store, machine["mid"]) if store else []
+    trend = {"status": "insufficient"}
+    if cmp is not None and cmp.distance is not None and mode in ("check", "before_repair"):
+        trend = baseline.drift(_drift_series(history) + [cmp.distance])
     repair = None
     if mode == "after_repair" and base_list and store:
         before = store.last(machine["mid"], "before_repair")
@@ -90,7 +138,8 @@ def analyze(path: str | Path, *, store=None, uid: str = "local", machine_name: s
         repair = baseline.repair_verdict(before_cmp, cmp)
     result = assess_mod.assess(quality_verdict=q_verdict, quality_checks=checks, audio=audio, motion=motion,
                                comparison=cmp, mode=mode, repair=repair,
-                               region_source=region.source if region else "none")
+                               region_source=region.source if region else "none",
+                               spot=spot_cmp, ambient=ambient_info, trend=trend)
     timer.lap("assess")
 
     if store and result["decision"] != "rerecord":
@@ -136,7 +185,9 @@ def analyze(path: str | Path, *, store=None, uid: str = "local", machine_name: s
         "motion_spectrum": {"freqs": motion.freqs, "roi": motion.psd_roi, "ref": motion.psd_ref}
         if motion and motion.ok else None,
         "audio": audio.summary() if audio else None,
-        "features": feats, "assessment": result, "explanation": text, "artifacts": artifacts,
+        "history": history + ([{"created": time.time(), "kind": mode, "decision": result["decision"],
+                                "distance": cmp.distance if cmp else None}] if result["decision"] != "rerecord" else []),
+        "features": {k: v for k, v in feats.items() if k != "spot"}, "assessment": result, "explanation": text, "artifacts": artifacts,
         "timing": {"stages_ms": timer.stages, "total_ms": total, "target_ms": s.response_target_s * 1000,
                    "within_target": total <= s.response_target_s * 1000,
                    "note": "Analysis time on this server only; excludes WhatsApp upload/download time."},

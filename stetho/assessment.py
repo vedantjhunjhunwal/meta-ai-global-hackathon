@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from .motion import alias_family, alias_frequency
 
-DECISIONS = ("rerecord", "baseline_saved", "no_change", "watch", "technician", "no_reference", "repair_check")
+DECISIONS = ("rerecord", "baseline_saved", "ambient_saved", "no_change", "watch", "technician", "no_reference", "repair_check")
 
 # Absolute (no-baseline) heuristics. Uncalibrated: tuned on simulated data only.
 ABS = {
@@ -52,6 +52,7 @@ HYPOTHESES = {
     "shaft_tone_increased": ["imbalance", "misalignment", "loose_mounting"],
     "shaking_increased": ["loose_mounting", "imbalance", "misalignment"],
     "sound_changed": ["operating_condition_changed", "wear_general"],
+    "gradual_drift": ["bearing_wear", "wear_general", "loose_mounting"],
 }
 
 
@@ -124,7 +125,7 @@ def baseline_findings(cmp) -> list[dict]:
 
 
 def assess(*, quality_verdict, quality_checks, audio, motion, comparison, mode="check",
-           repair=None, region_source="centre_prior") -> dict:
+           repair=None, region_source="centre_prior", spot=None, ambient=None, trend=None) -> dict:
     limits, steps = [], []
     usable_audio = bool(audio and audio.ok)
     usable_motion = bool(motion and motion.ok)
@@ -143,7 +144,9 @@ def assess(*, quality_verdict, quality_checks, audio, motion, comparison, mode="
 
     out = {"decision": None, "findings": [], "cross_modal": xm, "limitations": limits, "next_steps": steps,
            "safety": ["no_touch_running", "keep_guards", "switch_off_if_smoke"], "mode": mode,
-           "comparison": comparison.as_dict() if comparison else None, "repair": repair}
+           "comparison": comparison.as_dict() if comparison else None, "repair": repair,
+           "spot": spot or {"status": "not_available"}, "ambient": ambient or {"status": "not_available"},
+           "trend": trend or {"status": "insufficient"}}
 
     if quality_verdict == "fail" or not (usable_audio or usable_motion):
         out["decision"] = "rerecord"
@@ -152,6 +155,25 @@ def assess(*, quality_verdict, quality_checks, audio, motion, comparison, mode="
         out["rerecord_advice"] = sorted({c.advice for c in quality_checks if c.status == "fail"} or {"record_10_seconds"})
         steps.append("record_again_guided")
         return out
+
+    if mode == "ambient":
+        out["decision"] = "ambient_saved"
+        out["comparison"], out["cross_modal"] = None, {"status": "not_available"}
+        steps.append("ambient_then_record")
+        return out
+
+    if (spot or {}).get("status") in ("moved", "different_view"):
+        limits.append("different_spot")
+        steps.append("record_from_marked_spot")
+        if spot["status"] == "different_view":
+            steps.append("confirm_same_machine")
+    if (ambient or {}).get("status") == "mismatch":
+        limits.append("ambient_reference_mismatch")
+        steps.append("record_new_ambient")
+    if (ambient or {}).get("excluded"):
+        limits.append("ambient_masks_bands")
+    if (ambient or {}).get("overall_margin_db") is not None and ambient["overall_margin_db"] < 6.0:
+        limits.append("machine_barely_audible")
 
     absolute = absolute_patterns(audio)
     has_baseline = comparison is not None and comparison.change != "not_compared"
@@ -194,6 +216,20 @@ def assess(*, quality_verdict, quality_checks, audio, motion, comparison, mode="
         else:
             out["decision"] = "no_change"
             steps += ["routine_recheck"]
+        if (comparison.change in ("clear", "possible") and set(comparison.groups_changed) <= {"spectral_shape", "hiss"}
+                and (ambient or {}).get("status") != "applied"):
+            # Only the sound's character changed: a new noise source nearby could do this.
+            steps.insert(0, "check_background_noise")
+        if (trend or {}).get("status") == "rising" and out["decision"] in ("no_change", "watch"):
+            # Each check alone looks acceptable, but the series keeps moving away from healthy.
+            out["findings"].insert(0, {"id": "gradual_drift", "strength": "moderate", "basis": "own_baseline_trend",
+                                       "hypotheses": HYPOTHESES["gradual_drift"],
+                                       "evidence": [_ev("checks_in_trend", trend["n"], "checks", "trend"),
+                                                    _ev("drift_per_check", trend["slope_per_check"],
+                                                        "distance units", "trend")]})
+            out["decision"] = "watch"
+            steps[:] = [st for st in steps if st != "routine_recheck"]
+            steps += ["record_again_same_spot_soon", "drift_consider_technician"]
         if "operating_condition_differs" in limits and out["decision"] != "no_change":
             steps.insert(0, "match_operating_condition")
         return out

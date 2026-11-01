@@ -45,7 +45,12 @@ class SimSpec:
     brightness: float = 1.0
     noise_level: float = 1.0
     crf: int = 20
-    seed: int = 0
+    seed: int = 0  # per-recording randomness (shake path, noise, phases)
+    scene_seed: int = 0  # the machine and its surroundings; same value = same installation
+    view_shift_px: float = 0.0  # camera placed off the usual spot (horizontal shift)
+    view_scale: float = 1.0  # camera closer (>1) or further (<1) than the usual spot
+    machine_on: bool = True  # False = background-noise reference recording
+    ambient_hiss: float = 0.0  # level of a 3-6 kHz background source (insects, generator, wind)
     audio_sr: int = 44100
     with_audio: bool = True
     bpfo_order: float = 3.58  # outer-race defect frequency / shaft frequency (typical 6203-ish)
@@ -79,16 +84,17 @@ def _shake(rng: np.random.Generator, n: int, fps: float, amp: float) -> np.ndarr
 
 def render_frames(spec: SimSpec) -> tuple[np.ndarray, dict]:
     rng = np.random.default_rng(spec.seed)
+    scene_rng = np.random.default_rng(spec.scene_seed + 7)
     n = int(round(spec.duration_s * spec.fps))
     H, W = spec.height, spec.width
     pad = 24
-    bg = _texture(rng, H + 2 * pad, W + 2 * pad, 2.0, 40, 200)
+    bg = _texture(scene_rng, H + 2 * pad, W + 2 * pad, 2.0, 40, 200)
     bw, bh = W // 3, H // 3
-    body = _texture(rng, bh, bw, 1.2, 60, 240)
+    body = _texture(scene_rng, bh, bw, 1.2, 60, 240)
     cv2.rectangle(body, (0, 0), (bw - 1, bh - 1), 20, 2)
     shake = _shake(rng, n, spec.fps, spec.shake_px)
     t = np.arange(n) / spec.fps
-    amp = spec.vib_px * (3.0 * spec.fault_severity if spec.fault == "imbalance" else 1.0)
+    amp = spec.vib_px * (3.0 * spec.fault_severity if spec.fault == "imbalance" else 1.0) * spec.machine_on
     phase = rng.uniform(0, 2 * np.pi)
     vib = np.stack([amp * np.sin(2 * np.pi * spec.shaft_hz * t + phase),
                     0.6 * amp * np.cos(2 * np.pi * spec.shaft_hz * t + phase)], axis=1)
@@ -103,7 +109,9 @@ def render_frames(spec: SimSpec) -> tuple[np.ndarray, dict]:
         placed = cv2.warpAffine(body, m_body, (W + 2 * pad, H + 2 * pad))
         scene = scene * (1 - mask) + placed * mask
         # The whole view moves with the hand-held camera.
-        m_cam = np.float32([[1, 0, -pad + sx], [0, 1, -pad + sy]])
+        sc = spec.view_scale
+        m_cam = np.float32([[sc, 0, W / 2 + sx + spec.view_shift_px - sc * (pad + W / 2)],
+                            [0, sc, H / 2 + sy - sc * (pad + H / 2)]])
         frame = cv2.warpAffine(scene, m_cam, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
         frame = frame * spec.brightness + rng.normal(0, 1.5, frame.shape)
         out[i] = np.clip(frame, 0, 255).astype(np.uint8)
@@ -118,15 +126,16 @@ def render_audio(spec: SimSpec) -> np.ndarray:
     t = np.arange(n) / sr
     f0 = spec.shaft_hz
     x = np.zeros(n)
+    on = 1.0 if spec.machine_on else 0.0
     # Electrical hum at twice mains frequency, and its harmonic.
-    x += 0.20 * np.sin(2 * np.pi * 2 * spec.mains_hz * t)
-    x += 0.06 * np.sin(2 * np.pi * 4 * spec.mains_hz * t + 0.4)
+    x += on * 0.20 * np.sin(2 * np.pi * 2 * spec.mains_hz * t)
+    x += on * 0.06 * np.sin(2 * np.pi * 4 * spec.mains_hz * t + 0.4)
     # Shaft harmonics.
     one_x = 0.10 * (3.0 * spec.fault_severity if spec.fault == "imbalance" else 1.0)
     for k, a in ((1, one_x), (2, 0.05), (3, 0.03), (4, 0.02)):
-        x += a * np.sin(2 * np.pi * k * f0 * t + rng.uniform(0, 6.28))
+        x += on * a * np.sin(2 * np.pi * k * f0 * t + rng.uniform(0, 6.28))
     # Vane-pass tone of a 6-vane impeller.
-    x += 0.04 * np.sin(2 * np.pi * 6 * f0 * t + 0.9)
+    x += on * 0.04 * np.sin(2 * np.pi * 6 * f0 * t + 0.9)
     # Broadband flow/fan noise (pinkish).
     white = rng.normal(0, 1, n)
     spec_w = np.fft.rfft(white)
@@ -134,10 +143,18 @@ def render_audio(spec: SimSpec) -> np.ndarray:
     spec_w[1:] /= np.sqrt(freqs[1:] / 100.0)
     spec_w[0] = 0
     pink = np.fft.irfft(spec_w, n)
-    x += 0.03 * spec.noise_level * pink / (pink.std() + 1e-12)
+    x += (0.03 * on + 0.006) * spec.noise_level * pink / (pink.std() + 1e-12)
     x += 0.004 * spec.noise_level * rng.normal(0, 1, n)
 
-    if spec.fault == "bearing":
+    if spec.ambient_hiss > 0:
+        from scipy import signal as _sig
+        sos = _sig.butter(4, [3000, 6000], btype="bandpass", fs=sr, output="sos")
+        hiss = _sig.sosfilt(sos, rng.normal(0, 1, n))
+        x += spec.ambient_hiss * hiss / (hiss.std() + 1e-12)
+
+    if not spec.machine_on:
+        pass
+    elif spec.fault == "bearing":
         # Periodic impacts at the outer-race defect rate exciting a ~3.8 kHz resonance.
         rate = spec.bpfo_order * f0
         impulse_t = np.arange(0.01, spec.duration_s, 1.0 / rate)

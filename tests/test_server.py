@@ -83,3 +83,9 @@ def test_webhook_verify_signature_and_reply(settings):
     r = c.post("/webhook/whatsapp", content=body, headers={"X-Hub-Signature-256": sig, "content-type": "application/json"})
     assert r.status_code == 200
     assert sent and sent[0]["to"] == "919811111111" and "YES" in sent[0]["text"]["body"]
+
+
+def test_demo_rejects_unknown_scenario_and_mode(settings):
+    c = client(settings)
+    assert c.post("/api/demo/nope", data={"session": SESSION}).status_code == 404
+    assert c.post("/api/demo/healthy", data={"session": SESSION, "mode": "bogus"}).status_code == 400

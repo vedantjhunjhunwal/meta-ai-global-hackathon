@@ -70,7 +70,13 @@
         <button data-demo="ambient">Save background (machine off)</button>
         <button data-demo="moved">Phone moved closer</button>
       </div>
-      <label class="inline"><input type="checkbox" id="demoAfter"> treat as “after repair”</label>
+      <label class="inline">Treat the simulated recording as
+        <select id="demoMode">
+          <option value="check">a routine check</option>
+          <option value="before_repair">just before a repair</option>
+          <option value="after_repair">just after a repair</option>
+        </select>
+      </label>
     </div>
     <p id="busy" class="busy" hidden aria-live="polite"><span class="spinner" aria-hidden="true"></span> <span id="busyText">Analysing…</span></p>
     <p id="error" class="error" role="alert" hidden></p>

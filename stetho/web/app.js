@@ -18,7 +18,10 @@
 
   // Per-browser pseudonymous session (convenience only; the server hashes it).
   let session = null;
-  try { session = localStorage.getItem("stetho.session"); } catch (_) {}
+  // A ?session=... link (printed by scripts/stage_demo.py) lets the browser share a prepared demo machine.
+  const fromUrl = new URLSearchParams(location.search).get("session");
+  if (fromUrl && /^[A-Za-z0-9_-]{8,64}$/.test(fromUrl)) session = fromUrl;
+  if (!session) { try { session = localStorage.getItem("stetho.session"); } catch (_) {} }
   if (!session) {
     session = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
     try { localStorage.setItem("stetho.session", session); } catch (_) {}
@@ -104,7 +107,7 @@
   document.querySelectorAll("[data-demo]").forEach((b) => b.addEventListener("click", () => {
     const fd = new FormData();
     fd.append("session", session); fd.append("lang", $("lang").value);
-    fd.append("mode", $("demoAfter").checked ? "after_repair" : "check");
+    fd.append("mode", $("demoMode").value);
     post(`/api/demo/${b.dataset.demo}`, fd, "Generating a simulated recording and analysing it…");
   }));
 

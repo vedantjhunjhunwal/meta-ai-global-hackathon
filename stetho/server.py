@@ -123,21 +123,16 @@ def create_app(settings=None, store=None, graph_transport=None, llm=None) -> Fas
                 dest.unlink(missing_ok=True)
         return public(report)
 
-    @app.post("/api/demo/{scenario}")
-    async def demo(scenario: str, session: str = Form(...), lang: str = Form("en"), mode: str = Form("check")):
-        """Run the pipeline on SIMULATED recordings. Builds 3 simulated baselines first if needed."""
-        if scenario not in SCENARIOS:
-            raise HTTPException(404, "unknown scenario")
-        uid = session_uid(session)
-        sim_dir = s.data_dir / "sim"
+    sim_dir = s.data_dir / "sim"
+
+    def sim(name, **kw):
         sim_dir.mkdir(exist_ok=True)
+        p = sim_dir / f"{name}.mp4"
+        if not p.exists():
+            synth.make_recording(synth.SimSpec(fps=120, duration_s=10, **kw), p)
+        return p
 
-        def sim(name, **kw):
-            p = sim_dir / f"{name}.mp4"
-            if not p.exists():
-                synth.make_recording(synth.SimSpec(fps=120, duration_s=10, **kw), p)
-            return p
-
+    async def ensure_baselines(uid: str, lang: str) -> int:
         m = st.machine(uid, DEMO_MACHINE)
         built = 0
         while len(st.baselines(m["mid"])) < 3:
@@ -146,6 +141,28 @@ def create_app(settings=None, store=None, graph_transport=None, llm=None) -> Fas
             await run_in_threadpool(pipeline.analyze, p, settings=s, store=st, uid=uid, machine_name=DEMO_MACHINE,
                                     mode="baseline", lang=lang, make_voice=False, make_visual=False)
             built += 1
+        return built
+
+    @app.post("/api/demo/prepare")
+    async def demo_prepare(session: str = Form(...), lang: str = Form("en")):
+        """Pre-generate every SIMULATED clip and this session's 3 healthy references (for live demos)."""
+        uid = session_uid(session)
+        t0 = time.perf_counter()
+        for name, kw in SCENARIOS.items():
+            await run_in_threadpool(sim, name, **kw)
+        built = await ensure_baselines(uid, lang)
+        return {"scenarios": list(SCENARIOS), "baselines_built_now": built,
+                "seconds": round(time.perf_counter() - t0, 1), "simulated": True}
+
+    @app.post("/api/demo/{scenario}")
+    async def demo(scenario: str, session: str = Form(...), lang: str = Form("en"), mode: str = Form("check")):
+        """Run the pipeline on SIMULATED recordings. Builds 3 simulated baselines first if needed."""
+        if scenario not in SCENARIOS:
+            raise HTTPException(404, "unknown scenario")
+        if mode not in pipeline.MODES:
+            raise HTTPException(400, "unknown mode")
+        uid = session_uid(session)
+        built = await ensure_baselines(uid, lang)
         p = await run_in_threadpool(sim, scenario, **SCENARIOS[scenario])
         if scenario == "ambient":
             mode = "ambient"

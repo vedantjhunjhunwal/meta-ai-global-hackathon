@@ -264,7 +264,7 @@ def render(assessment: dict, lang: str = "en", machine: str = "your machine", au
         if fnd.get("hypotheses"):
             items = ", ".join(_t(lang, f"hyp.{h}") for h in fnd["hypotheses"][:3])
             lines.append(_t(lang, "hyp.prefix", items=items))
-    if d not in ("rerecord", "baseline_saved"):
+    if d not in ("rerecord", "baseline_saved", "ambient_saved"):
         lines.append(_t(lang, "u.screening"))
         for lim in assessment["limitations"]:
             if lim in ("few_baselines", "operating_condition_differs", "no_audio_evidence", "different_spot",

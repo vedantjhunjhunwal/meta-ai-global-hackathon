@@ -27,6 +27,16 @@ Three features protect the baseline comparison from its main real-world failure 
 
 The full reasoning, alternatives considered, scope (monoblock pumps, small farms and workshops), and verified model and provider status are in [`docs/DESIGN.md`](docs/DESIGN.md). Physics limits and what is and isn't established are in [`docs/SCIENCE.md`](docs/SCIENCE.md).
 
+## Run on your desktop (easiest)
+
+1. Install **Python 3.10+** (https://www.python.org/downloads/; on Windows tick "Add python.exe to PATH") and **ffmpeg** (Windows: `winget install ffmpeg`; Mac: `brew install ffmpeg`; Linux: `sudo apt install ffmpeg`). Optionally install **espeak-ng** for voice notes.
+2. Download this repository (green **Code** button → **Download ZIP**, then unzip) or `git clone` it.
+3. Start it:
+   - **Windows:** double-click `start_windows.bat`
+   - **Mac / Linux:** run `./start.sh` in a terminal in the folder
+
+The launcher installs the Python packages on first run, picks a free port (8000, or the next free one), and opens Stetho in your browser. Keep the window open while you use it; close it to stop. On Windows, if voice notes are missing after installing eSpeak NG, add its folder (usually `C:\Program Files\eSpeak NG`) to PATH and restart the launcher.
+
 ## Quick start (offline, no credentials)
 
 Requirements: Python ≥ 3.10, `ffmpeg`/`ffprobe`, and optionally `espeak-ng` for voice notes.

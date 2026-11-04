@@ -4,7 +4,7 @@
 
 Stetho is a phone-video *screening* aid for small electric water pumps and motors, designed for WhatsApp. An owner rests a phone near a running pump and sends a 10–15 s video. Stetho checks recording quality, cancels hand shake using the still background, extracts sound and visible-motion evidence, and compares it with **that machine's own healthy recordings**. The reply is a short voice note in English or Hindi with one next step: *carry on*, *re-record soon*, or *ask a technician*. After a repair, it checks whether the machine has returned towards its healthy reference.
 
-> **Status: honest summary.** The full pipeline (intake, quality gate, motion and audio analysis, baseline comparison, assessment, explanation, voice note, visual aid, WhatsApp webhook, web UI) is implemented and covered by 72 passing tests. It has only been exercised on **simulated** recordings and **mocked** WhatsApp/LLM APIs. It has **not** been validated on real pumps or against accelerometers. The claims in the original idea about test-rig accelerometer validation are unverified, and no such data exists in this repository. See [`docs/VALIDATION_PROTOCOL.md`](docs/VALIDATION_PROTOCOL.md) for how to produce that evidence.
+> **Status: honest summary.** The full pipeline (intake, quality gate, motion and audio analysis, baseline comparison, assessment, explanation, voice note, visual aid, WhatsApp webhook, web UI) is implemented and covered by 73 passing tests. It has only been exercised on **simulated** recordings and **mocked** WhatsApp/LLM APIs. It has **not** been validated on real pumps or against accelerometers. The claims in the original idea about test-rig accelerometer validation are unverified, and no such data exists in this repository. See [`docs/VALIDATION_PROTOCOL.md`](docs/VALIDATION_PROTOCOL.md) for how to produce that evidence.
 
 ![Stetho web demo (simulated input)](docs/ui.png)
 
@@ -49,6 +49,12 @@ Start the web demo at http://127.0.0.1:8000 (upload your own video, or click a s
 
 ```bash
 python -m stetho serve
+```
+
+Run the timed **3-minute stage demo**: it prints what to say, runs each step, and keeps time. Add `--drive browser` to click along in the web UI instead. See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md).
+
+```bash
+python scripts/stage_demo.py
 ```
 
 Analyse your own recording (baselines persist in `var/stetho.db`):
@@ -109,13 +115,15 @@ stetho/
   server.py      FastAPI: web UI, REST API, webhook
   synth.py       SIMULATED recordings with known ground truth (tests and demo only)
   web/           accessible single-page UI
+scripts/
+  stage_demo.py  timed 3-minute demo (drives the API, or teleprompts while you click)
 ```
 
 Evidence extraction and assessment never depend on the language model. Explanations are rendered from the structured assessment.
 
 ## What works today (tested)
 
-Results from `python -m pytest -q` in this repository: **72 passed**. On simulated inputs:
+Results from `python -m pytest -q` in this repository: **73 passed**. On simulated inputs:
 - Motion: under simulated hand shake, the 48 Hz shaft motion is recovered at 120 fps, and the uncompensated measurement is dominated by shake (ablation test). At 30 fps the measured peak sits at the predicted alias (12 Hz). A machine filling the frame is reported as "no static reference", not guessed.
 - Audio: mains (50/60 Hz) and shaft speed (2- and 4-pole cases) identified. Shape features are unchanged by a 10 dB gain change. Simulated bearing impacts give a periodic envelope at 3.58× shaft speed. Simulated cavitation is impulsive but not periodic.
 - Decisions: healthy → `no_change`; simulated bearing defect → `technician` (clear, vs. own baseline); after simulated repair → `back_to_baseline`; dark or short recordings → `rerecord` and are not stored as baselines; no baseline and no strong pattern → `no_reference` (abstains).
